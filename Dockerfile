@@ -28,13 +28,13 @@ RUN mkdir /data
 ##      Force builds with new releases     ##
 #############################################
 
-RUN echo '22.03, g2nb repository update, with background image fix'
+RUN echo '22.03, theme update'
 
 #############################################
 ##      Add the repositories               ##
 #############################################
 
-RUN git clone https://github.com/genepattern/notebook-repository.git /srv/notebook-repository/
+RUN git clone https://github.com/genepattern/notebook-repository.git /srv/notebook-repository/  # Authenticator
 RUN git clone https://github.com/g2nb/workspace.git /srv/workspace/
 RUN git clone https://github.com/g2nb/hub-theme.git /srv/hub-theme/
 RUN git clone https://github.com/g2nb/notebook-projects.git /srv/notebook-projects/
@@ -75,10 +75,6 @@ COPY ./config/projects_config.py /data/
 # Add the theme assets to JupyterHub
 RUN cp /srv/hub-theme/theme/images/* /usr/local/share/jupyterhub/static/images/
 RUN cp /srv/hub-theme/theme/css/* /usr/local/share/jupyterhub/static/css/
-
-# Import the theme
-#RUN { echo '@import url("/hub/static/css/genepattern.css");'; cat /usr/local/share/jupyterhub/static/css/style.min.css; } \
-#    > /tmp/style.min.css && mv /tmp/style.min.css /usr/local/share/jupyterhub/static/css/style.min.css
 
 #############################################
 ##  $NB_USER                               ##

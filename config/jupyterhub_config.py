@@ -36,7 +36,7 @@ c.DockerSpawner.volumes = {
 
 # Add the theme config
 c.JupyterHub.logo_file = '/srv/hub-theme/theme/images/g2nb_logo.svg'
-c.JupyterHub.template_paths = ['/srv/hub-theme/theme/templates']
+c.JupyterHub.template_paths = ['/srv/hub-theme/theme/templates', '/srv/notebook-projects/templates']
 
 # Named server config
 c.JupyterHub.allow_named_servers = True
@@ -46,6 +46,10 @@ c.DockerSpawner.name_template = "{prefix}-{username}-{servername}"
 
 # Services API configuration
 c.JupyterHub.load_roles = [
+    {
+        "name": "user",
+        "scopes": ["access:services", "self"],  # grant all users access to all services
+    },
     {
         "name": "projects",
         "scopes": [
