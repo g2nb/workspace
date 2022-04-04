@@ -51,11 +51,11 @@ c.JupyterHub.load_roles = [
         "scopes": ["access:services", "self"],  # grant all users access to all services
     },
     {
-        "name": "projects",
+        "name": "services_default",
         "scopes": [
             "self",
         ],
-        "services": ["projects"],
+        "services": ["projects", "sharing", "download"],
     },
     {
         "name": "jupyterhub-idle-culler-role",
@@ -65,7 +65,6 @@ c.JupyterHub.load_roles = [
             "read:servers",
             "delete:servers",
         ],
-        # assignment of role's permissions to:
         "services": ["jupyterhub-idle-culler-service"],
     }
 ]
@@ -79,12 +78,26 @@ c.JupyterHub.services = [
         'environment': {
             'IMAGE_WHITELIST': ','.join(c.DockerSpawner.image_whitelist.keys())
         },
-        'command': ['python', 'start-projects.py', '--config=/data/projects_config.py']
+        'command': [sys.executable, 'start-projects.py', '--config=/data/projects_config.py']
     },
     {
         "name": "jupyterhub-idle-culler-service",
         "command": [sys.executable, "-m", "jupyterhub_idle_culler", "--timeout=3600"],
-    }
+    },
+    {
+        'name': 'sharing',
+        'url': 'http://127.0.0.1:3001/',
+        'cwd': '/srv/workspace/scripts',
+        'oauth_no_confirm': True,
+        'command': [sys.executable, 'redirect_preview.py']
+    },
+    {
+        'name': 'download',
+        'url': 'http://127.0.0.1:3002/',
+        'cwd': '/srv/workspace/scripts',
+        'oauth_no_confirm': True,
+        'command': [sys.executable, 'download_endpoint.py']
+    },
 ]
 
 # Enable CORS
