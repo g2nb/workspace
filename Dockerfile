@@ -1,8 +1,8 @@
 # Dockerfile for running an instance of the g2nb Notebook Repository
 
 # Pull a known good jupyterhub image from the official Jupyter stacks
-# Built 01-25-2022
-FROM jupyterhub/jupyterhub:2.1.1
+# Built 05-06-2022
+FROM jupyterhub/jupyterhub:2.3.0
 
 MAINTAINER Thorin Tabor <tmtabor@cloud.ucsd.edu>
 
@@ -28,7 +28,7 @@ RUN mkdir /data
 ##      Force builds with new releases     ##
 #############################################
 
-RUN echo '22.03, theme update'
+RUN echo '22.05, JupyterHub 2.3, sorting update'
 
 #############################################
 ##      Add the repositories               ##
