@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y gconf-service libasound2 libatk1.0-0 li
     libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
     libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget nano \
     docker.io libcurl4 curl gcc python3-dev libmysqlclient-dev \
-    && pip install awscli jupyterhub_idle_culler sqlalchemy tornado jinja2 traitlets requests pymysql dockerspawner \
+    && pip install awscli jupyterhub_idle_culler sqlalchemy tornado jinja2 traitlets requests pymysql oauthenticator dockerspawner \
     && ln -s /usr/bin/python3 /usr/bin/python
 
 #############################################
@@ -28,13 +28,14 @@ RUN mkdir /data
 ##      Force builds with new releases     ##
 #############################################
 
-RUN echo '22.05, JupyterHub 2.3, sorting update'
+RUN echo '22.06, Multi-auth, usage endpoint'
 
 #############################################
 ##      Add the repositories               ##
 #############################################
 
-RUN git clone https://github.com/genepattern/notebook-repository.git /srv/notebook-repository/  # Authenticator
+RUN git clone https://github.com/g2nb/multiauthenticator.git /srv/multiauthenticator/
+RUN git clone https://github.com/genepattern/gpauthenticator.git /srv/gpauthenticator/
 RUN git clone https://github.com/g2nb/workspace.git /srv/workspace/
 RUN git clone https://github.com/g2nb/hub-theme.git /srv/hub-theme/
 RUN git clone https://github.com/g2nb/notebook-projects.git /srv/notebook-projects/
@@ -55,7 +56,8 @@ RUN mkdir /data/defaults
 
 # Add to the PYTHONPATH
 RUN cp -r /srv/notebook-projects/projects /usr/local/lib/python3.8/dist-packages/
-RUN mv /srv/notebook-repository/gpauthenticator /usr/local/lib/python3.8/dist-packages/
+RUN mv /srv/gpauthenticator/gpauthenticator /usr/local/lib/python3.8/dist-packages/
+RUN mv /srv/multiauthenticator/multiauthenticator.py /usr/local/lib/python3.8/dist-packages/
 
 # Add static assets to JupyterHub
 RUN cp /srv/notebook-projects/static/js/* /usr/local/share/jupyterhub/static/js/

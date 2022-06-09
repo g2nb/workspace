@@ -1,5 +1,8 @@
 import os
 import sys
+from gpauthenticator import GenePatternAuthenticator
+from oauthenticator.google import GoogleOAuthenticator
+from oauthenticator.globus import GlobusOAuthenticator
 from projects.hub import UserHandler, PreviewHandler, StatsHandler, pre_spawn_hook, spawner_escape
 
 c = get_config()
@@ -11,11 +14,26 @@ c.JupyterHub.bind_url = 'http://:80'
 c.JupyterHub.hub_ip = '0.0.0.0'
 # c.JupyterHub.hub_connect_ip = 'notebook_repository'
 
-# Configure the GenePattern Authenticator
-c.JupyterHub.authenticator_class = 'gpauthenticator.GenePatternAuthenticator'
-c.GenePatternAuthenticator.users_dir_path = '/data/users'
-c.GenePatternAuthenticator.default_nb_dir = '/data/default'
+# Configure the Authenticator
 c.Authenticator.admin_users = ['admin']
+c.JupyterHub.authenticator_class = 'multiauthenticator.MultiAuthenticator'
+c.MultiAuthenticator.authenticators = [
+    (GenePatternAuthenticator, '/genepattern', {
+        'service_name': 'GenePattern',
+        'users_dir_path': '/data/users',
+        'default_nb_dir': '/data/default'
+    }),
+    (GlobusOAuthenticator, '/globus', {
+        'client_id': 'REDACTED',
+        'client_secret': 'REDACTED',
+        'oauth_callback_url': 'http://localhost:8000/hub/globus/oauth_callback'
+    }),
+    (GoogleOAuthenticator, '/google', {
+        'client_id': 'REDACTED',
+        'client_secret': 'REDACTED',
+        'oauth_callback_url': 'http://localhost:8000/hub/google/oauth_callback'
+    }),
+]
 
 # Configure DockerSpawner
 c.JupyterHub.spawner_class = 'dockerspawner.DockerSpawner'
@@ -55,7 +73,7 @@ c.JupyterHub.load_roles = [
         "scopes": [
             "self",
         ],
-        "services": ["projects", "sharing", "download"],
+        "services": ["projects", "sharing", "download", "usage"],
     },
     {
         "name": "jupyterhub-idle-culler-role",
@@ -97,6 +115,13 @@ c.JupyterHub.services = [
         'cwd': '/srv/workspace/scripts',
         'oauth_no_confirm': True,
         'command': [sys.executable, 'download_endpoint.py']
+    },
+    {
+        'name': 'usage',
+        'url': 'http://127.0.0.1:3003/',
+        'cwd': '/srv/workspace/scripts',
+        'oauth_no_confirm': True,
+        'command': [sys.executable, 'usage_endpoint.py']
     },
 ]
 
