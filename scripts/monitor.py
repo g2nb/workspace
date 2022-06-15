@@ -10,7 +10,7 @@ r = None
 
 # Attempt to reach the HTTP -> HTTPS redirect
 try:
-    r = requests.get('http://notebook.genepattern.org', allow_redirects=False, timeout=30)
+    r = requests.get('http://www.g2nb.org', allow_redirects=False, timeout=30)
 except requests.Timeout as e:
     error_report += "Unable to reach the Notebook Repository's HTTP -> HTTPS redirect.\n"
 if r is not None and r.status_code != 301:
@@ -18,7 +18,7 @@ if r is not None and r.status_code != 301:
 
 # Attempt to reach the hub
 try:
-    r = requests.get('https://notebook.genepattern.org', timeout=30)
+    r = requests.get('https://workspace.g2nb.org', timeout=30)
 except requests.Timeout as e:
     error_report += "Unable to the the Notebook Repository login page.\n"
 if r is not None and r.status_code != 200:
