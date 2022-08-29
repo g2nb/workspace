@@ -1,3 +1,36 @@
+"""
+Globus Transfer Service
+
+To use this service you need to first set it up in jupyterhub_config.py
+
+c.JupyterHub.load_roles = [
+    {
+        "name": "services_default",
+        "scopes": [
+            "self",
+            "admin:servers",
+        ],
+        "services": ["globus"],
+    },
+]
+
+c.JupyterHub.services = [
+    {
+        'name': 'globus',
+        'url': 'http://127.0.0.1:3004/',
+        'cwd': '/data',
+        'oauth_no_confirm': True,
+        'environment': {
+            'CLIENT_ID': 'insert_client_id_here',
+            'CLIENT_SECRET': 'insert_client_secret_here',
+            'GLOBUS_COLLECTION_ID': 'insert_guest_collection_id_here',
+        },
+        'command': [sys.executable, 'globus_management.py']
+    },
+]
+
+"""
+
 from jupyterhub.services.auth import HubOAuthenticated, HubOAuthCallbackHandler, HubAuth
 from tornado.ioloop import IOLoop
 from tornado.web import Application, RequestHandler, authenticated
