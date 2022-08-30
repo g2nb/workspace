@@ -29,7 +29,7 @@ RUN mkdir /data
 ##      Force builds with new releases     ##
 #############################################
 
-RUN echo '22.08.1, Globus update'
+RUN echo '22.08.1, Globus update + Theme Update'
 
 #############################################
 ##      Add the repositories               ##
@@ -63,6 +63,7 @@ RUN mv /srv/multiauthenticator/multiauthenticator.py /usr/local/lib/python3.8/di
 # Add static assets to JupyterHub
 RUN cp /srv/notebook-projects/static/js/* /usr/local/share/jupyterhub/static/js/
 RUN cp /srv/notebook-projects/static/css/* /usr/local/share/jupyterhub/static/css/
+RUN cp /srv/notebook-projects/static/images/* /usr/local/share/jupyterhub/static/images/
 
 #############################################
 ##      Add the config files               ##
