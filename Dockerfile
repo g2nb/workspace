@@ -2,7 +2,7 @@
 
 # Pull a known good jupyterhub image from the official Jupyter stacks
 # Built 05-06-2022
-FROM jupyterhub/jupyterhub:2.3.0
+FROM jupyterhub/jupyterhub:2.3.1
 
 MAINTAINER Thorin Tabor <tmtabor@cloud.ucsd.edu>
 
@@ -15,7 +15,8 @@ RUN apt-get update && apt-get install -y gconf-service libasound2 libatk1.0-0 li
     libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
     libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget nano \
     docker.io libcurl4 curl gcc python3-dev libmysqlclient-dev \
-    && pip install awscli jupyterhub_idle_culler sqlalchemy tornado jinja2 traitlets requests pymysql oauthenticator dockerspawner \
+    && pip install awscli jupyterhub_idle_culler sqlalchemy tornado jinja2 traitlets requests pymysql oauthenticator \
+    dockerspawner globus-sdk \
     && ln -s /usr/bin/python3 /usr/bin/python
 
 #############################################
@@ -28,7 +29,7 @@ RUN mkdir /data
 ##      Force builds with new releases     ##
 #############################################
 
-RUN echo '22.06, Multi-auth, usage endpoint'
+RUN echo '22.08.1, Globus update'
 
 #############################################
 ##      Add the repositories               ##
