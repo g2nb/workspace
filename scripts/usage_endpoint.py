@@ -46,6 +46,21 @@ class UsageEvent(Base):
         session.commit()
         session.close()
 
+    def json(self):
+        data = { c.name: getattr(self, c.name) for c in self.__table__.columns }
+        for k in data:
+            if isinstance(data[k], datetime): data[k] = str(data[k])  # Special case for datetimes
+        return data
+
+    def get(event_token=None):
+        # Query the database
+        session = Database.instance().Session()
+        query = session.query(UsageEvent)
+        if event_token is not None: query = query.filter(UsageEvent.event_token == event_token)
+        results = query.all()
+        session.close()
+        return results
+
 
 class UsageHandler(RequestHandler):
     """Endpoint for tracking g2nb usage"""
@@ -76,10 +91,36 @@ class UsageHandler(RequestHandler):
         self.write('OK')
         self.finish()
 
+    def post(self, event_token=None):
+        """Record usage events and return an OK response"""
+        return self.get(event_token=event_token)
+
+
+class ReportHandler(RequestHandler):
+    """Endpoint for reporting g2nb usage"""
+
+    def set_default_headers(self):
+        """Handle CORS requests"""
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Headers", "x-requested-with")
+        self.set_header('Access-Control-Allow-Methods', 'POST, PUT, GET, OPTIONS, DELETE')
+
+    def options(self):
+        self.set_status(204)
+        self.finish()
+
+    def get(self, event_token=None):
+        """List usage events in JSON format"""
+        results = UsageEvent.get()
+        events = [e.json() for e in results]
+        self.write({'events': events})
+        self.finish()
+
 
 def make_app():
     # Assign handlers to the URLs and return
-    urls = [(r"/services/usage/(?P<event_token>.*)/", UsageHandler)]
+    urls = [(r"/services/usage/report/", ReportHandler),
+            (r"/services/usage/(?P<event_token>.*)/", UsageHandler)]
     return Application(urls, debug=True)
 
 
