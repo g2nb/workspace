@@ -1,8 +1,7 @@
-#!/home/thorin/config/anaconda/bin/python3
+#!/usr/bin/env python3
 
 import subprocess
 import smtplib
-import datetime
 import sys
 import shutil
 import base64
@@ -11,17 +10,26 @@ import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import urllib.request
+from datetime import datetime, timedelta, date
+from sqlalchemy import Column, Integer, String, DateTime, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+from urllib.parse import urlparse
 
 # Environment configuration
-server_name = "GenePattern Notebook"  # Name of the repo server to report
-include_extension = True              # Include the right column that polls GP server?
-user_dir = '/data/users'              # The dir where user data is stored
-stats_dir = '/data/counters/'         # Where to save the stats state
-data_dir = '/data/'                   # Directory with JupyterHub database
+server_name = "g2nb Workspace"        # Name of the repo server to report
+include_extension = False             # Include the right column that polls GP server?
+user_dir = '/data/lab/users/'         # The dir where user data is stored
+stats_dir = '/data/lab/counters/'     # Where to save the stats state
+data_dir = '/data/lab/'               # Directory with JupyterHub database
 sudo_req = 'sudo '                    # Make blank if sudo is not required
 test_email = 'user@domain.org'        # Email to send to when run with --test
 admin_login = 'username:password'     # Admin login credentials for GP server
 s3_bucket = 'gpnotebook-backup'       # s3 bucket to check for GP Broad stats
+DB_PATH = '//data/lab/usage.sqlite'   # Path to usage events database
+MAIL_SERVER = 'smtp-server-url'       # URL pointing at the SMTP server
+MAIL_USERNAME = 'username'            # Username for SMTP server, leave None if N/A
+MAIL_PASSWORD = 'password'            # Password for SMTP server
+
 
 # Handle arguments
 test_run = True if (len(sys.argv) >= 2 and sys.argv[1] == '--test') else False
@@ -60,7 +68,7 @@ def _poll_genepattern(gp_url, tag):
     try:
         request = urllib.request.Request(
             gp_url + '/gp/rest/v1/jobs/?tag=' + tag + '&pageSize=1000&includeChildren=true&includeOutputFiles=false&includePermissions=false')
-        base64string = base64.encodestring(bytearray(admin_login, 'utf-8')).decode('utf-8').replace('\n', '')
+        base64string = base64.encodebytes(bytearray(admin_login, 'utf-8')).decode('utf-8').replace('\n', '')
         request.add_header("Authorization", "Basic %s" % base64string)
         response = urllib.request.urlopen(request)
         json_str = response.read().decode('utf-8')
@@ -72,8 +80,8 @@ def _poll_genepattern(gp_url, tag):
 
     for job in jobs_json['items']:
         timestamp = job['dateSubmitted']
-        date = datetime.datetime.strptime(timestamp.split('T')[0], '%Y-%m-%d')
-        if date >= datetime.datetime.now() - datetime.timedelta(days=7):
+        date = datetime.strptime(timestamp.split('T')[0], '%Y-%m-%d')
+        if date >= datetime.now() - timedelta(days=7):
             count += 1
         if 'children' in job:
             child_count = len(job['children']['items'])
@@ -174,7 +182,7 @@ def get_user_disk():
             cmd_parts = line.split('\t')
 
             # Clean the username
-            cleaned_name = cmd_parts[1][len(user_dir):]
+            cleaned_name = cmd_parts[1][len(data_dir):]
 
             # Ignore the base directory
             if cleaned_name == '':
@@ -183,9 +191,9 @@ def get_user_disk():
             # Add the user stats to the list
             users.append([cmd_parts[0], cleaned_name])
 
-    # Create the HTML row list for top 20 users
+    # Create the HTML row list for top 10 users
     user_rows = ''
-    for i in range(len(users[:20])):
+    for i in range(len(users[:10])):
         user_rows += '<tr><td>' + users[i][1] + '</td><td>' + users[i][0] + '</td></tr>'
 
     return user_rows
@@ -230,22 +238,22 @@ def get_nb_count():
 
     if not test_run:
         # Weekly query
-        cmd_out = subprocess.getstatusoutput("find " + user_dir + " -type f -not -path '*/\.*' -mtime -7 -name *.ipynb | wc -l")[1]
+        cmd_out = subprocess.getstatusoutput("find " + data_dir + " -type f -not -path '*/\.*' -mtime -7 -name *.ipynb | wc -l")[1]
         user_week = int(cmd_out.strip())
         nb_count['week'] += user_week
 
         # Total query
-        cmd_out = subprocess.getstatusoutput("find " + user_dir + " -type f -not -path '*/\.*' -name *.ipynb | wc -l")[1]
+        cmd_out = subprocess.getstatusoutput("find " + data_dir + " -type f -not -path '*/\.*' -name *.ipynb | wc -l")[1]
         user_total = int(cmd_out.strip())
         nb_count['total'] += user_total
 
         # All files query, weekly
-        cmd_out = subprocess.getstatusoutput("find " + user_dir + " -type f -not -path '*/\.*' -mtime -7 | wc -l")[1]
+        cmd_out = subprocess.getstatusoutput("find " + data_dir + " -type f -not -path '*/\.*' -mtime -7 | wc -l")[1]
         files_week = int(cmd_out.strip())
         nb_count['files_week'] += files_week - user_week
 
         # All files query, total
-        cmd_out = subprocess.getstatusoutput("find " + user_dir + " -type f -not -path '*/\.*' | wc -l")[1]
+        cmd_out = subprocess.getstatusoutput("find " + data_dir + " -type f -not -path '*/\.*' | wc -l")[1]
         files_total = int(cmd_out.strip())
         nb_count['files_total'] += files_total - user_total
 
@@ -259,9 +267,9 @@ def _genepattern_users():
     :return: Return the number of GenePattern Notebook jobs launched on this server
     """
     try:
-        start_date = datetime.datetime.strftime(datetime.datetime.now() - datetime.timedelta(days=30), "%Y-%m-%d+01:01:01")
+        start_date = datetime.strftime(datetime.now() - timedelta(days=7), "%Y-%m-%d+01:01:01")
         request = urllib.request.Request('https:/cloud.genepattern.org/gp/rest/v1/users/new?start=' + start_date)
-        base64string = base64.encodestring(bytearray(admin_login, 'utf-8')).decode('utf-8').replace('\n', '')
+        base64string = base64.encodebytes(bytearray(admin_login, 'utf-8')).decode('utf-8').replace('\n', '')
         request.add_header("Authorization", "Basic %s" % base64string)
         response = urllib.request.urlopen(request)
         json_str = response.read().decode('utf-8')
@@ -278,12 +286,12 @@ def _genepattern_users_stopgap():
     """
 
     try:
-        start_date = datetime.datetime.strftime(datetime.datetime.now() - datetime.timedelta(days=30), "%Y-%m-%d")
-        end_date = datetime.datetime.strftime(datetime.datetime.now(), "%Y-%m-%d")
+        start_date = datetime.strftime(datetime.now() - timedelta(days=7), "%Y-%m-%d")
+        end_date = datetime.strftime(datetime.now(), "%Y-%m-%d")
 
         # http://cloud.genepattern.org/gp/rest/v1/usagestats/user_summary/2018-08-14/2018-08-21
         request = urllib.request.Request('https://cloud.genepattern.org/gp/rest/v1/usagestats/user_summary/' + start_date + '/' + end_date)
-        base64string = base64.encodestring(bytearray(admin_login, 'utf-8')).decode('utf-8').replace('\n', '')
+        base64string = base64.encodebytes(bytearray(admin_login, 'utf-8')).decode('utf-8').replace('\n', '')
         request.add_header("Authorization", "Basic %s" % base64string)
         response = urllib.request.urlopen(request)
         json_str = response.read().decode('utf-8')
@@ -344,7 +352,7 @@ def get_returning_users(returning_count):
 
     # Exclude members of the lab
     users_minus_exclusions = [user for user in all_users if user not in exclusion_list]
-    return users_minus_exclusions[:returning_count]
+    return users_minus_exclusions[:returning_count], returning_count
 
 
 def get_users():
@@ -369,7 +377,7 @@ def get_users():
 
     # Get a list of all returning users
     returning_count = len(set(user_list) & set(containers))
-    returning_users = get_returning_users(returning_count)
+    returning_users, returning_count = get_returning_users(returning_count)
 
     # Query the GenePattern public server for info about new users
     gp_users = _genepattern_users_stopgap()
@@ -432,7 +440,7 @@ def get_logins():
 
     # Move the log to backup
     if not test_run:
-        shutil.copyfileobj(open(data_dir + 'jupyterhub.log', 'r'), open(stats_dir + 'jupyterhub.log.old', 'w'))
+        shutil.copyfileobj(open(data_dir + 'jupyterhub.log', 'r'), open(stats_dir + 'jupyterhub.log', 'w'))
         subprocess.getstatusoutput('> ' + data_dir + 'jupyterhub.log')
 
     return logins
@@ -453,9 +461,9 @@ def get_nb_usage():
     # Sort notebooks by copied
     sorted_nb_tuples = sorted(nb_tuples.items(), key=lambda kv: kv[1], reverse=True)
 
-    # Create the HTML row list for top 20 notebooks
+    # Create the HTML row list for top 10 notebooks
     nb_rows = ''
-    for i in range(len(sorted_nb_tuples[:20])):
+    for i in range(len(sorted_nb_tuples[:10])):
         nb_rows += f'<tr><td>{sorted_nb_tuples[i][0]}</td><td>{sorted_nb_tuples[i][1]}</td></tr>'
 
     return nb_rows
@@ -473,14 +481,388 @@ def get_nb_updates():
     return nb_updates
 
 
-def send_mail(users, logins, disk, nb_count, weekly_jobs, docker, total_jobs, nb_updates, nb_usage, user_disk):
+def get_event_stats(start_date=None, end_date=None):
+    Base = declarative_base()
+
+    class Database:
+        _db_singleton = None
+        db = None
+        Session = None
+
+        def __init__(self):
+            self.db = create_engine(f'sqlite://{DB_PATH}', echo=False)
+            self.Session = sessionmaker(bind=self.db)
+            Base.metadata.create_all(self.db)
+
+        @classmethod
+        def instance(cls):
+            if cls._db_singleton is None:
+                cls._db_singleton = Database()
+            return cls._db_singleton
+
+    class UsageEvent(Base):
+        """ORM model representing a usage event"""
+        __tablename__ = 'events'
+
+        id = Column(Integer, primary_key=True)
+        event_token = Column(String(127))
+        description = Column(String(255))
+        created = Column(DateTime, default=datetime.utcnow)
+
+        def __init__(self, **kwargs):
+            super(UsageEvent, self).__init__()
+            self.__dict__.update(kwargs)
+
+        def save(self):
+            session = Database.instance().Session()
+            session.add(self)
+            session.commit()
+            session.close()
+
+        def json(self):
+            data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+            for k in data:
+                if isinstance(data[k], datetime): data[k] = str(data[k])  # Special case for datetimes
+            return data
+
+        @staticmethod
+        def get(event_token=None, start_date=None, end_date=None):
+            # Query the database
+            session = Database.instance().Session()
+            query = session.query(UsageEvent)
+            if event_token is not None: query = query.filter(UsageEvent.event_token == event_token)
+            if start_date is not None: query = query.filter(UsageEvent.created > start_date)
+            if end_date is not None: query = query.filter(UsageEvent.created < end_date)
+            results = query.all()
+            session.close()
+            return results
+
+
+    # Get all usage events in the specified date range
+    events = UsageEvent.get(start_date=start_date, end_date=end_date)
+
+    # Create a new dict to store all the compiled stats
+    event_stats = {}
+
+    # Loop over each usage event
+    for e in events:
+
+        # Special case for unknown tokens
+        if e.event_token == '': e.event_token = 'unknown'
+
+        # Lazily initialize event_stats and increment counts for each event_token
+        if e.event_token in event_stats: event_stats[e.event_token]['count'] += 1
+        else: event_stats[e.event_token] = {'count': 1}
+
+        # Note the latest time the event happened
+        if 'latest' not in event_stats[e.event_token]:
+            event_stats[e.event_token]['latest'] = e.created
+        elif event_stats[e.event_token]['latest'] < e.created:
+            event_stats[e.event_token]['latest'] = e.created
+
+        # Note the earliest time the event happened
+        if 'earliest' not in event_stats[e.event_token]:
+            event_stats[e.event_token]['earliest'] = e.created
+        elif event_stats[e.event_token]['earliest'] > e.created:
+            event_stats[e.event_token]['earliest'] = e.created
+
+        # Special parsing for tool_run
+        if e.event_token == 'tool_run':
+            # Lazily initialize the list of tools
+            if 'tools' not in event_stats[e.event_token]:
+                event_stats[e.event_token]['tools'] = {}
+
+            # Parse the description and handle blanks
+            origin, id, tool = e.description.split('|')
+            if origin == '': origin = 'unknown'
+            if tool == '': tool = 'unknown'
+
+            # Lazily initialize the specific tool
+            if tool not in event_stats[e.event_token]['tools']:
+                event_stats[e.event_token]['tools'][tool] = {'count': 1}
+            else:
+                event_stats[e.event_token]['tools'][tool]['count'] += 1
+
+        # Special parsing for project_launch
+        elif e.event_token == 'project_launch':
+            # Lazily initialize the list of users
+            if 'users' not in event_stats[e.event_token]:
+                event_stats[e.event_token]['users'] = {}
+
+            # Parse the description
+            user, project = e.description.split('|')
+
+            # Lazily initialize the specific user
+            if user not in event_stats[e.event_token]['users']:
+                event_stats[e.event_token]['users'][user] = {'count': 1}
+            else:
+                event_stats[e.event_token]['users'][user]['count'] += 1
+
+        # Special parsing for labextension_load
+        elif e.event_token == 'labextension_load':
+            # Lazily initialize the list of domains
+            if 'domains' not in event_stats[e.event_token]:
+                event_stats[e.event_token]['domains'] = {}
+
+            # Parse the description
+            url = urlparse(e.description)
+            hostname = url.hostname
+
+            # Lazily initialize the specific domain or increment the count
+            if hostname not in event_stats[e.event_token]['domains']:
+                event_stats[e.event_token]['domains'][hostname] = {'count': 1}
+            else:
+                event_stats[e.event_token]['domains'][hostname]['count'] += 1
+
+        # Handle other event_tokens
+        else:
+            # Lazily initialize the list of descriptions
+            if 'descriptions' not in event_stats[e.event_token]:
+                event_stats[e.event_token]['descriptions'] = []
+
+            # Append to the list
+            event_stats[e.event_token]['descriptions'].append[e.description]
+
+    # Ensure that the expected event types have at least been initialized
+    if 'tool_run' not in event_stats: event_stats['tool_run'] = { 'count': 0, 'tools': [] }
+    if 'project_launch' not in event_stats: event_stats['project_launch'] = { 'count': 0, 'users': [] }
+    if 'labextension_load' not in event_stats: event_stats['labextension_load'] = { 'count': 0, 'domains': [] }
+
+    return event_stats
+
+
+def users_table(users):
+    return f"""
+        <h3>Repository users</h3>
+        <table border="1">
+            <tr>
+                <th>Users</th>
+                <th>#</th>
+            </tr>
+            <tr>
+                <td>All-time users</td>
+                <td>{users['total']}</td>
+            </tr>
+            <tr>
+                <td>Weekly returning</td>
+                <td>{users['returning']}</td>
+            </tr>
+            <tr>
+                <td>Weekly new</td>
+                <td>{users['new']}</td>
+            </tr>
+        </table>
+    """
+
+
+def logins_table(logins):
+    return f"""
+        <h3>Repository user logins</h3>
+        <table border="1">
+            <tr>
+                <th>Logins</th>
+                <th>#</th>
+            </tr>
+            <tr>
+                <td>All-time total</td>
+                <td>{logins['total']}</td>
+            </tr>
+            <tr>
+                <td>This week</td>
+                <td>{logins['week']}</td>
+            </tr>
+        </table>
+    """
+
+
+def notebooks_table(nb_count):
+    return f"""
+        <h3>Repository notebooks created</h3>
+        <table border="1">
+            <tr>
+                <th>Notebooks</th>
+                <th>#</th>
+            </tr>
+            <tr>
+                <td>Total in repository</td>
+                <td>{nb_count['total']}</td>
+            </tr>
+            <tr>
+                <td>Modified this week</td>
+                <td>{nb_count['week']}</td>
+            </tr>
+        </table>
+    """
+
+
+def disk_table(disk):
+    return f"""
+        <h3>Repository disk space used</h3>
+        <table border="1">
+            <tr>
+                <th>File System</th>
+                <th>Used</th>
+                <th>Total</th>
+                <th>Percent</th>
+            </tr>
+            <tr>
+                <td>General Disk</td>
+                <td>{disk["gen_disk_used"]}</td>
+                <td>{disk["gen_disk_total"]}</td>
+                <td>{disk["gen_disk_percent"]}</td>
+            </tr>
+            <tr>
+                <td>Docker Disk</td>
+                <td>{disk["docker_disk_used"]}</td>
+                <td>{disk["docker_disk_total"]}</td>
+                <td>{disk["docker_disk_percent"]}</td>
+            </tr>
+        </table>
+    """
+
+
+def files_table(nb_count):
+    return f"""
+        <h3>Repository non-notebook files</h3>
+        <table border="1">
+            <tr>
+                <th>Files</th>
+                <th>#</th>
+            </tr>
+            <tr>
+                <td>Total in repository</td>
+                <td>{nb_count['files_total']}</td>
+            </tr>
+            <tr>
+                <td>Modified this week</td>
+                <td>{nb_count['files_week']}</td>
+            </tr>
+        </table>
+    """
+
+
+def new_users_table(users):
+    return f"""
+        <h3>New Users This Week</h3>
+        <table border="1">
+            <tr>
+                <th>Username</th>
+                <th>Email</th>
+            </tr>
+            {users['new_users']}
+        </table>
+    """
+
+
+def returning_users_table(users):
+    return f"""
+        <h3>Returning Users This Week</h3>
+        <table border="1">
+            <tr>
+                <th>Username</th>
+            </tr>
+            {users['returning_users']}
+        </table>
+    """
+
+
+def updated_notebooks_table(nb_updates):
+    return f"""
+        <h3>Public Notebooks Created or Updated This Week</h3>
+        <table border="1">
+        <tr><th>Name</th><th>Comment</th></tr>
+        {nb_updates}
+        </table>
+    """
+
+
+def top_notebooks_table(nb_usage):
+    return f"""
+        <h3>Top 10 Public Notebooks Since 2019-02-22</h3>
+        <table border="1">
+            <tr>
+                <th>Notebook</th>
+                <th>Copies</th>
+            </tr>
+            {nb_usage}
+        </table>
+    """
+
+
+def top_disk_table(user_disk):
+    return f"""
+        <h3>User Disk Usage Top 10</h3>
+        <table border="1">
+            <tr>
+                <th>Username</th>
+                <th>Disk Usage</th>
+            </tr>
+            {user_disk}
+        </table>
+    """
+
+
+def environment_starts_table(event_stats):
+    env_counts = sorted(event_stats['labextension_load']['domains'].items(), key=lambda x: x[1]['count'], reverse=True)
+    env_rows = ''
+    for u in env_counts:
+        env_rows += f"<tr><td>{u[0]}</td><td>{u[1]['count']}</td></tr>"
+    return f"""
+        <h3>Weekly Environment Starts</h3>
+        <table border="1">
+            <tr>
+                <th>Domain</th>
+                <th>Count</th>
+            </tr>
+            {env_rows}
+        </table>
+    """
+
+
+def top_tools_table(event_stats):
+    tool_counts = sorted(event_stats['tool_run']['tools'].items(), key=lambda x: x[1]['count'], reverse=True)
+    tool_counts = tool_counts[:10]
+    tool_rows = ''
+    for u in tool_counts:
+        tool_rows += f"<tr><td>{u[0]}</td><td>{u[1]['count']}</td></tr>"
+    return f"""
+        <h3>Top Weekly Tools</h3>
+        <table border="1">
+            <tr>
+                <th>Tool</th>
+                <th>Tool Runs</th>
+            </tr>
+            {tool_rows}
+        </table>
+    """
+
+
+def top_users_table(event_stats):
+    user_counts = sorted(event_stats['project_launch']['users'].items(), key=lambda x: x[1]['count'], reverse=True)
+    user_counts = user_counts[:10]
+    user_rows = ''
+    for u in user_counts:
+        user_rows += f"<tr><td>{u[0]}</td><td>{u[1]['count']}</td></tr>"
+    return f"""
+        <h3>Top Weekly Workspace Users</h3>
+        <table border="1">
+            <tr>
+                <th>User</th>
+                <th>Projects Launched</th>
+            </tr>
+            {user_rows}
+        </table>
+    """
+
+
+def send_mail(users, logins, disk, nb_count, weekly_jobs, docker, total_jobs, nb_updates, nb_usage, user_disk, event_stats):
     """
     Send the weekly report in an email
     :return:
     """
-    today = str(datetime.date.today())
+    today = str(date.today())
     fromaddr = "gp-info@broadinstitute.org" if not test_run else test_email
-    toaddr = "gp-exec@broadinstitute.org, gp-dev@broadinstitute.org" if not test_run else test_email
+    toaddr = "gp-dev@broadinstitute.org" if not test_run else test_email
     msg = MIMEMultipart()
     msg['From'] = fromaddr
     msg['To'] = toaddr
@@ -494,114 +876,25 @@ def send_mail(users, logins, disk, nb_count, weekly_jobs, docker, total_jobs, nb
                     <tr>
                         <td width="50%%" valign="top">
                             <h2>Notebook Repository</h2>
-                            <h3>Repository users</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>Users</th>
-                                    <th>#</th>
-                                </tr>
-                                <tr>
-                                    <td>All-time users</td>
-                                    <td>{users['total']}</td>
-                                </tr>
-                                <tr>
-                                    <td>Weekly returning</td>
-                                    <td>{users['returning']}</td>
-                                </tr>
-                                <tr>
-                                    <td>Weekly new</td>
-                                    <td>{users['new']}</td>
-                                </tr>
-                            </table>
+                            {users_table(users)}
 
-                            <h3>Repository user logins</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>Logins</th>
-                                    <th>#</th>
-                                </tr>
-                                <tr>
-                                    <td>All-time total</td>
-                                    <td>{logins['total']}</td>
-                                </tr>
-                                <tr>
-                                    <td>This week</td>
-                                    <td>{logins['week']}</td>
-                                </tr>
-                            </table>
+                            {logins_table(logins)}
 
-                            <h3>Repository notebooks created</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>Notebooks</th>
-                                    <th>#</th>
-                                </tr>
-                                <tr>
-                                    <td>Total in repository</td>
-                                    <td>{nb_count['total']}</td>
-                                </tr>
-                                <tr>
-                                    <td>Modified this week</td>
-                                    <td>{nb_count['week']}</td>
-                                </tr>
-                            </table>
+                            {notebooks_table(nb_count)}
 
-                            <h3>Repository non-notebook files</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>Files</th>
-                                    <th>#</th>
-                                </tr>
-                                <tr>
-                                    <td>Total in repository</td>
-                                    <td>{nb_count['files_total']}</td>
-                                </tr>
-                                <tr>
-                                    <td>Modified this week</td>
-                                    <td>{nb_count['files_week']}</td>
-                                </tr>
-                            </table>
+                            {files_table(nb_count)}
 
-                            <h3>Repository disk space used</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>File System</th>
-                                    <th>Used</th>
-                                    <th>Total</th>
-                                    <th>Percent</th>
-                                </tr>
-                                <tr>
-                                    <td>General Disk</td>
-                                    <td>{disk["gen_disk_used"]}</td>
-                                    <td>{disk["gen_disk_total"]}</td>
-                                    <td>{disk["gen_disk_percent"]}</td>
-                                </tr>
-                                <tr>
-                                    <td>Docker Disk</td>
-                                    <td>{disk["docker_disk_used"]}</td>
-                                    <td>{disk["docker_disk_total"]}</td>
-                                    <td>{disk["docker_disk_percent"]}</td>
-                                </tr>
-                            </table>
+                            {disk_table(disk)}
 
-                            <h3>New Users This Week</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>Username</th>
-                                    <th>Email</th>
-                                </tr>
-                                {users['new_users']}
-                            </table>
+                            {new_users_table(users)}
                             
-                            <h3>Returning Users This Week</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>Username</th>
-                                </tr>
-                                {users['returning_users']}
-                            </table>
+                            {returning_users_table(users)}
+                            
+                            {top_users_table(event_stats)}
                         </td>
                         <td width="50%%" valign="top">
+                        
+                            {environment_starts_table(event_stats)}
         """
 
     if include_extension:
@@ -686,29 +979,13 @@ def send_mail(users, logins, disk, nb_count, weekly_jobs, docker, total_jobs, nb
             """
 
     body = body + f"""
-                            <h3>Public Notebooks Created or Updated This Week</h3>
-                            <table border="1">
-                            <tr><th>Name</th><th>Comment</th></tr>
-                            {nb_updates}
-                            </table>
+                            {top_tools_table(event_stats)}
+    
+                            {updated_notebooks_table(nb_updates)}
 
-                            <h3>Top 20 Public Notebooks Since 2019-02-22</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>Notebook</th>
-                                    <th>Copies</th>
-                                </tr>
-                                {nb_usage}
-                            </table>
+                            {top_notebooks_table(nb_usage)}
 
-                            <h3>User Disk Usage Top 20</h3>
-                            <table border="1">
-                                <tr>
-                                    <th>Username</th>
-                                    <th>Disk Usage</th>
-                                </tr>
-                                {user_disk}
-                            </table>
+                            {top_disk_table(user_disk)}
 
                         </td>
                     </tr>
@@ -719,7 +996,8 @@ def send_mail(users, logins, disk, nb_count, weekly_jobs, docker, total_jobs, nb
 
     msg.attach(MIMEText(body, 'html'))
 
-    server = smtplib.SMTP('localhost', 25)
+    server = smtplib.SMTP(MAIL_SERVER, 25)
+    server.login(MAIL_USERNAME, MAIL_PASSWORD)
     text = msg.as_string()
     server.sendmail(fromaddr, toaddr.split(', '), text)
     server.quit()
@@ -734,6 +1012,7 @@ def gather_stats():
     nb_updates = get_nb_updates()
     nb_usage = get_nb_usage()
     user_disk = get_user_disk()
+    event_stats = get_event_stats(datetime.now() - timedelta(days=7))
 
     if include_extension:
         weekly_jobs = get_weekly_jobs()
@@ -743,7 +1022,7 @@ def gather_stats():
         weekly_jobs, docker, total_jobs = None, None, None
 
     # Send the email
-    send_mail(users, logins, disk, nb_count, weekly_jobs, docker, total_jobs, nb_updates, nb_usage, user_disk)
+    send_mail(users, logins, disk, nb_count, weekly_jobs, docker, total_jobs, nb_updates, nb_usage, user_disk, event_stats)
 
 
 gather_stats()
