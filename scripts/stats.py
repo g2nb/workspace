@@ -615,13 +615,15 @@ def get_event_stats(start_date=None, end_date=None):
                 event_stats[e.event_token]['domains'][hostname]['count'] += 1
 
         # Handle other event_tokens
-        else:
-            # Lazily initialize the list of descriptions
-            if 'descriptions' not in event_stats[e.event_token]:
-                event_stats[e.event_token]['descriptions'] = []
-
-            # Append to the list
-            event_stats[e.event_token]['descriptions'].append[e.description]
+        # else:
+        #     # Lazily initialize the list of descriptions
+        #     if e.event_token not in event_stats:
+        #         event_stats[e.event_token] = {}
+        #     if 'descriptions' not in event_stats[e.event_token]:
+        #         event_stats[e.event_token]['descriptions'] = []
+        #
+        #     # Append to the list
+        #     event_stats[e.event_token]['descriptions'].append[e.description]
 
     # Ensure that the expected event types have at least been initialized
     if 'tool_run' not in event_stats: event_stats['tool_run'] = { 'count': 0, 'tools': [] }
