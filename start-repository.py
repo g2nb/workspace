@@ -64,7 +64,7 @@ projects_exists = os.path.exists(os.path.join(args.data, 'projects_config.py'))
 # Start temp container and copy files, if necessary
 if not db_exists or not config_exists or not projects_exists:
     print('Starting temporary container')
-    subprocess.Popen('docker run --name=copy_data genepattern/notebook-repository'.split())
+    subprocess.Popen('docker run --name=copy_data g2nb/workspace'.split())
     subprocess.run('sleep 10'.split())
 
 # Get the database, if necessary
