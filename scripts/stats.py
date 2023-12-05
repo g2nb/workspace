@@ -351,7 +351,7 @@ def get_returning_users(returning_count):
     all_users = cmd_out.split('\n')
 
     # Exclude members of the lab
-    users_minus_exclusions = [user for user in all_users if user not in exclusion_list]
+    users_minus_exclusions = [user for user in all_users if user not in exclusion_list and not user.startswith('guest')]
     return users_minus_exclusions[:returning_count], returning_count
 
 

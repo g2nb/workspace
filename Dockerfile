@@ -2,7 +2,7 @@
 
 # Pull a known good jupyterhub image from the official Jupyter stacks
 # Built 05-06-2022
-FROM jupyterhub/jupyterhub:2.3.1
+FROM jupyterhub/jupyterhub:4.0.1
 
 MAINTAINER Thorin Tabor <tmtabor@cloud.ucsd.edu>
 
@@ -15,9 +15,8 @@ RUN apt-get update && apt-get install -y gconf-service libasound2 libatk1.0-0 li
     libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
     libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget nano \
     docker.io libcurl4 curl gcc python3-dev libmysqlclient-dev \
-    && pip install awscli jupyterhub_idle_culler sqlalchemy tornado jinja2 traitlets requests pymysql oauthenticator \
-    dockerspawner globus-sdk \
-    && ln -s /usr/bin/python3 /usr/bin/python
+    && pip install awscli jupyterhub_idle_culler sqlalchemy==1.4.37 tornado jinja2 traitlets requests pymysql oauthenticator==15.1.0 \
+    dockerspawner globus-sdk
 
 #############################################
 ##      Create the data volume             ##
@@ -29,7 +28,7 @@ RUN mkdir /data
 ##      Force builds with new releases     ##
 #############################################
 
-RUN echo '22.08.1, Globus update + Theme Update'
+RUN echo '23.11, Accept cookie message'
 
 #############################################
 ##      Add the repositories               ##
@@ -37,6 +36,7 @@ RUN echo '22.08.1, Globus update + Theme Update'
 
 RUN git clone https://github.com/g2nb/multiauthenticator.git /srv/multiauthenticator/
 RUN git clone https://github.com/genepattern/gpauthenticator.git /srv/gpauthenticator/
+RUN git clone https://github.com/g2nb/guestauthenticator.git /srv/guestauthenticator/
 RUN git clone https://github.com/g2nb/workspace.git /srv/workspace/
 RUN git clone https://github.com/g2nb/hub-theme.git /srv/hub-theme/
 RUN git clone https://github.com/g2nb/notebook-projects.git /srv/notebook-projects/
@@ -56,9 +56,10 @@ RUN mkdir /data/defaults
 #############################################
 
 # Add to the PYTHONPATH
-RUN cp -r /srv/notebook-projects/projects /usr/local/lib/python3.8/dist-packages/
-RUN mv /srv/gpauthenticator/gpauthenticator /usr/local/lib/python3.8/dist-packages/
-RUN mv /srv/multiauthenticator/multiauthenticator.py /usr/local/lib/python3.8/dist-packages/
+RUN cp -r /srv/notebook-projects/projects /usr/local/lib/python3.10/dist-packages/
+RUN mv /srv/gpauthenticator/gpauthenticator /usr/local/lib/python3.10/dist-packages/
+RUN mv /srv/multiauthenticator/multiauthenticator.py /usr/local/lib/python3.10/dist-packages/
+RUN mv /srv/guestauthenticator/guestauthenticator /usr/local/lib/python3.10/dist-packages/
 
 # Add static assets to JupyterHub
 RUN cp /srv/notebook-projects/static/js/* /usr/local/share/jupyterhub/static/js/
