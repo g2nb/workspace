@@ -45,11 +45,18 @@ while getopts ":hn:r:s:j:" option; do
 done
 
 ############################################################
+# Shut down the JupyterLab application                     #
+############################################################
+
+helm uninstall --namespace $namespace $namespace
+
+############################################################
 # Tear down the cluster                                    #
 ############################################################
 
-# Get the name of the attached EFS drive
+# Get the name of the attached EFS drive and VPC
 efs_id=$(kubectl get --output jsonpath='{.parameters.fileSystemId}' storageclass efs-sc)
+vpc_id=$(eksctl get cluster --region $aws_region $cluster_name | awk '{print $5}')
 
 # Clean up all services, pods and any remaining PVCs
 kubectl delete --namespace $namespace services --all
@@ -57,11 +64,49 @@ kubectl delete pod --namespace $namespace --all
 kubectl delete --namespace $namespace pvc --all
 
 # Delete the namespace
-eksctl delete cluster --name $cluster_name --region $aws_region --force
-
-# Delete the EKS-EFS security group
-aws ec2 delete-security-group --group-name $security_group $aws_region
+eksctl delete cluster --name $cluster_name --region $aws_region
 
 # Delete the attached EFS drive
 aws efs describe-mount-targets --file-system-id $efs_id --region $aws_region --output text | awk '{print $7}' | xargs -Imount_id aws efs delete-mount-target --mount-target-id mount_id --region $aws_region
+sleep 10
 aws efs delete-file-system --file-system-id $efs_id --region $aws_region
+
+# Delete the EKS-EFS security group
+group_id=$(aws ec2 describe-security-groups --filter Name=vpc-id,Values=$vpc_id Name=group-name,Values=$security_group --query 'SecurityGroups[*].[GroupId]' --output text --region $aws_region)
+aws ec2 delete-security-group --group-id $group_id --region $aws_region
+
+# Delete the VPC
+# This last step still needs to be done manually. To do it automatically we must first perfect deleting all components of the VPC:
+
+#Delete your security group by using the delete-security-group command.
+#
+#aws ec2 delete-security-group --group-id sg-id
+#
+#Delete each network ACL by using the delete-network-acl command.
+#
+#aws ec2 delete-network-acl --network-acl-id acl-id
+#
+#Delete each subnet by using the delete-subnet command.
+#
+#aws ec2 delete-subnet --subnet-id subnet-id
+#
+#Delete each custom route table by using the delete-route-table command.
+#
+#aws ec2 delete-route-table --route-table-id rtb-id
+#
+#Detach your internet gateway from your VPC by using the detach-internet-gateway command.
+#
+#aws ec2 detach-internet-gateway --internet-gateway-id igw-id --vpc-id vpc-id
+#
+#Delete your internet gateway by using the delete-internet-gateway command.
+#
+#aws ec2 delete-internet-gateway --internet-gateway-id igw-id
+#
+#[Dual stack VPC] Delete your egress-only internet gateway by using the delete-egress-only-internet-gateway command.
+#
+#aws ec2 delete-egress-only-internet-gateway --egress-only-internet-gateway-id eigw-id
+#
+#Delete your VPC by using the delete-vpc command.
+#
+#aws ec2 delete-vpc --vpc-id vpc-id
+# aws ec2 describe-vpcs --region $aws_region --filters Name=tag:alpha.eksctl.io/cluster-name,Values=$cluster_name
