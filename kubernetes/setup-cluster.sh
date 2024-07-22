@@ -96,6 +96,7 @@ cidr_range=$(aws ec2 describe-vpcs --vpc-ids $vpc_id --query "Vpcs[].CidrBlock" 
 security_group_id=$(aws ec2 create-security-group --group-name $security_group --description "Access EFS drive from EKS" --vpc-id $vpc_id --region $aws_region --output text)
 aws ec2 authorize-security-group-ingress --group-id $security_group_id --protocol tcp --port 2049 --cidr $cidr_range --region $aws_region
 file_system_id=$(aws efs create-file-system --region $aws_region --performance-mode generalPurpose --query 'FileSystemId' --output text)
+sleep 10
 aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc_id" --query 'Subnets[*].{SubnetId: SubnetId,AvailabilityZone: AvailabilityZone,CidrBlock: CidrBlock}' --region $aws_region --output text | awk '{print $3}' | xargs -Isubnet_id aws efs create-mount-target --file-system-id $file_system_id --security-groups $security_group_id --region $aws_region --subnet-id subnet_id
 
 # Create the EFS storage class

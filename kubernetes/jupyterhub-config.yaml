@@ -9,13 +9,48 @@
 # Available chart versions: https://hub.jupyter.org/helm-chart/
 #
 hub:
+#  image:
+#    name: g2nb/workspace
+#    tag: latest     # It is recommended not to use latest tag
   db:
     pvc:
       annotations:
         storageClassName: "efs-sc"
         accessModes: ReadWriteMany
         resources: 11Gi
+  config:
+    Authenticator:
+      admin_users:
+        - tabor
+        - tabor@broadinstitute.org
+  extraConfig:                # Inject additional config or files
+    hooks.py: |    
+      def pre_spawn_hook(spawner):          
+          chosen_profile = spawner.user_options.get("profile", "")
+          print(chosen_profile)
+      c.KubeSpawner.pre_spawn_hook = pre_spawn_hook
 singleuser:
   image:
-    name: jupyter/base-notebook
-    tag: latest
+    name: g2nb/lab
+    tag: latest     # It is recommended not to use latest tag
+  cmd: null         # cmd: null allows the container to run a custom entry command
+  extraEnv:         # Set custom environment variables
+    EDITOR: "nano"
+  lifecycleHooks:
+    postStart:      # Run command after a user as started their server
+      exec:
+        command: ["mkdir", "/home/jovyan/foo"]
+#  profileList:
+#    - display_name: "g2nb"
+#      description: "Start the g2nb environment"
+#      kubespawner_override:   # Configuration unique to this profile
+#        extraEnv:
+#          ENVIRONMENT: "g2nb"
+#      default: true           # Defines the default profile - only use for one profile
+#    - display_name: "Datascience environment"
+#      description: "If you want the additional bells and whistles: Python, R, and Julia."
+#      kubespawner_override:
+#        image: jupyter/datascience-notebook:2343e33dec46
+  cpu:                        # Limit container to 1/2 CPU
+    limit: .5
+    guarantee: .5
