@@ -49,6 +49,7 @@ done
 ############################################################
 
 helm uninstall --namespace $namespace $namespace
+sleep 10
 
 ############################################################
 # Tear down the cluster                                    #
@@ -56,26 +57,32 @@ helm uninstall --namespace $namespace $namespace
 
 # Get the name of the attached EFS drive and VPC
 efs_id=$(kubectl get --output jsonpath='{.parameters.fileSystemId}' storageclass efs-sc)
-vpc_id=$(eksctl get cluster --region $aws_region $cluster_name | awk '{print $5}')
+vpc_id=$(eksctl get cluster --region $aws_region $cluster_name | tail -1 | awk '{print $5}')
 
-# Clean up all services, pods and any remaining PVCs
+# Clean up all services, pods, pvc and namespaces
 kubectl delete --namespace $namespace services --all
 kubectl delete pod --namespace $namespace --all
 kubectl delete --namespace $namespace pvc --all
+kubectl delete namespace $namespace
+kubectl delete storageclass efs-sc
 
-# Delete the namespace
+# Delete the cluster
+sleep 10
 eksctl delete cluster --name $cluster_name --region $aws_region
 
 # Delete the attached EFS drive
-aws efs describe-mount-targets --file-system-id $efs_id --region $aws_region --output text | awk '{print $7}' | xargs -Imount_id aws efs delete-mount-target --mount-target-id mount_id --region $aws_region
 sleep 10
+aws efs describe-mount-targets --file-system-id $efs_id --region $aws_region --output text | awk '{print $7}' | xargs -Imount_id aws efs delete-mount-target --mount-target-id mount_id --region $aws_region
+sleep 20
 aws efs delete-file-system --file-system-id $efs_id --region $aws_region
+sleep 10
 
 # Delete the EKS-EFS security group
 group_id=$(aws ec2 describe-security-groups --filter Name=vpc-id,Values=$vpc_id Name=group-name,Values=$security_group --query 'SecurityGroups[*].[GroupId]' --output text --region $aws_region)
 aws ec2 delete-security-group --group-id $group_id --region $aws_region
 
 # Delete the VPC
+# NO LONGER NECESSARY?
 # This last step still needs to be done manually. To do it automatically we must first perfect deleting all components of the VPC:
 
 #Delete your security group by using the delete-security-group command.

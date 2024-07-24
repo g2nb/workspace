@@ -9,9 +9,9 @@
 # Available chart versions: https://hub.jupyter.org/helm-chart/
 #
 hub:
-#  image:
-#    name: g2nb/workspace
-#    tag: latest     # It is recommended not to use latest tag
+  image:
+    name: g2nb/workspace
+    tag: kube     # It is recommended not to use latest tag
   db:
     pvc:
       annotations:
