@@ -58,10 +58,12 @@ RUN mkdir /data/defaults
 #############################################
 
 # Add to the PYTHONPATH
-RUN cp -r /srv/notebook-projects/projects /usr/local/lib/python3.11/dist-packages/
-RUN mv /srv/gpauthenticator/gpauthenticator /usr/local/lib/python3.11/dist-packages/
-RUN mv /srv/multiauthenticator/multiauthenticator.py /usr/local/lib/python3.11/dist-packages/
-RUN mv /srv/guestauthenticator/guestauthenticator /usr/local/lib/python3.11/dist-packages/
+USER root
+RUN cp -r /srv/notebook-projects/projects /usr/local/lib/python3.11/site-packages/
+RUN mv /srv/gpauthenticator/gpauthenticator /usr/local/lib/python3.11/site-packages/
+RUN mv /srv/multiauthenticator/multiauthenticator.py /usr/local/lib/python3.11/site-packages/
+RUN mv /srv/guestauthenticator/guestauthenticator /usr/local/lib/python3.11/site-packages/
+USER ${NB_USER}
 
 # Add static assets to JupyterHub
 RUN cp /srv/notebook-projects/static/js/* /usr/local/share/jupyterhub/static/js/

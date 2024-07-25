@@ -18,17 +18,87 @@ hub:
         storageClassName: "efs-sc"
         accessModes: ReadWriteMany
         resources: 11Gi
+  allowNamedServers: true
+  templatePaths: ['/srv/hub-theme/theme/templates', '/srv/notebook-projects/templates']
   config:
+    JupyterHub:
+      admin_access: true
+      authenticator_class: multiauthenticator.MultiAuthenticator
     Authenticator:
       admin_users:
+        - admin
         - tabor
-        - tabor@broadinstitute.org
+        - ted
+        - gpdemo
+        - mmrtest5
+      enable_auth_state: true
+#    MultiAuthenticator:
+#      authenticators:
+#        - xxx
   extraConfig:                # Inject additional config or files
-    hooks.py: |    
-      def pre_spawn_hook(spawner):          
-          chosen_profile = spawner.user_options.get("profile", "")
-          print(chosen_profile)
-      c.KubeSpawner.pre_spawn_hook = pre_spawn_hook
+    00-project-imports: |
+      from projects.hub import UserHandler, PreviewHandler, StatsHandler, pre_spawn_hook, spawner_escape
+    01-authenticator-imports: |
+      from gpauthenticator import GenePatternAuthenticator
+      from oauthenticator.google import GoogleOAuthenticator
+      from oauthenticator.globus import GlobusOAuthenticator
+      from guestauthenticator import GuestAuthenticator
+    02-multiauth-config: |
+      c.MultiAuthenticator.authenticators = [
+          (GenePatternAuthenticator, '/genepattern', {
+              'service_name': 'GenePattern',
+              'users_dir_path': '/data/users',
+              'default_nb_dir': '/data/default',
+              'custom_html': ''
+          }),
+          (GoogleOAuthenticator, '/google', {
+              'client_id': '<CLIENT_ID>.apps.googleusercontent.com',
+              'client_secret': '<SECRET>',
+              'oauth_callback_url': 'https://workspace.g2nb.org/hub/google/oauth_callback'
+          }),
+          (GuestAuthenticator, '/guest', {
+              'service_name': 'Guest',
+              'pre_spawn_hook': lambda spawner: pre_spawn_hook(spawner, userdir='/data/users')
+          }),
+      ]
+#          (GlobusOAuthenticator, '/globus', {
+#              'client_id': '<CLIENT_ID>',
+#              'client_secret': '<SECRET>',
+#              'oauth_callback_url': 'https://workspace.g2nb.org/hub/globus/oauth_callback',
+#              'enable_auth_state': True,
+#              'scope': ['openid', 'profile', 'urn:globus:auth:scope:transfer.api.globus.org:all', 'urn:globus:auth:scope:auth.globus.org:view_identities', 'email', 'offline_access'],
+#              'exclude_tokens': ['auth.globus.org'],
+#              'globus_local_endpoint': '<ENDPOINT_ID>',
+#              'logout_redirect_url': 'https://globus.org/logout',
+#              'revoke_tokens_on_logout': False
+#          }),
+    03-spawner-config: |
+      c.Spawner.environment = {
+          'GLOBUS_HOST_POSIX_BASEPATH': '/home/jovyan',
+          'GLOBUS_HOST_COLLECTION_BASEPATH': lambda spawner: f'{spawner.user.name}/{spawner.name}',
+          'GLOBUS_COLLECTION_ID': '<COLLECTION_ID>',
+          'GLOBUS_TRANSFER_SUBMISSION_IS_HUB_SERVICE': 'true',
+          'GLOBUS_TRANSFER_SUBMISSION_SCOPE': 'https://auth.globus.org/scopes/<SCOPE_ID>/g2nb',
+          'GLOBUS_TRANSFER_SUBMISSION_URL': lambda spawner: f'https://workspace.g2nb.org/services/globus/',
+      }
+    04-cors-config: |
+      origin = '*'
+      c.Spawner.args = [f'--NotebookApp.allow_origin={origin}', '--NotebookApp.allow_credentials=True', "--NotebookApp.tornado_settings={\"headers\":{\"Referrer-Policy\":\"no-referrer-when-downgrade\"}}"]
+      c.JupyterHub.tornado_settings = {
+          'headers': {
+              'Referrer-Policy': 'no-referrer-when-downgrade',
+              'Access-Control-Allow-Origin': origin,
+              'Access-Control-Allow-Credentials': 'true',
+          },
+      }
+    05-logo-config: |
+      c.JupyterHub.logo_file = '/srv/hub-theme/theme/images/g2nb_logo.svg'
+    06-named-server-config: |
+      c.Spawner.prefix = 'lab'
+      c.JupyterHub.default_url = '/home'
+      c.JupyterHub.extra_handlers = [('user.json', UserHandler), ('preview', PreviewHandler), ('stats', StatsHandler)]
+      c.Spawner.name_template = "{prefix}-{username}--{servername}"
+
 singleuser:
   image:
     name: g2nb/lab
